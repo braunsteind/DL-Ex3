@@ -70,7 +70,7 @@ def make_bad_examples(n, add_class):
             pos_example += str(random.randint(1, 9))
 
         if add_class:
-            pos.append(pos_example + ' 1')
+            pos.append(pos_example + ' 0')
         else:
             pos.append(pos_example)
     return pos
@@ -87,8 +87,44 @@ def generate_examples():
         for neg_example in neg_examples:
             file2.write("{0}\n".format(neg_example))
 
+def make_train_set():
+
+    pos_examples = make_good_examples(2000, True)
+    neg_examples = make_bad_examples(2000, True)
+
+    train_set = pos_examples + neg_examples
+    random.shuffle(train_set)
+
+    return train_set
+
+def make_test_set():
+
+    pos_examples = make_good_examples(200, True)
+    neg_examples = make_bad_examples(200, True)
+
+    test_set = pos_examples + neg_examples
+    random.shuffle(test_set)
+    return test_set
+
+
+def make_test_and_train_sets():
+    train = make_train_set()
+
+    test = make_test_set()
+
+    with open('train', 'w') as file1:
+        file1.write("\n".join(train))
+
+    with open('test', 'w') as file2:
+        file2.write("\n".join(test))
+
+    # with open('test', 'w') as file2:
+    #     for x in test:
+    #         file2.write("{0}\n".format(x))
+
 if __name__ == '__main__':
     generate_examples()
+    make_test_and_train_sets()
 
 
 

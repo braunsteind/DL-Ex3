@@ -39,7 +39,6 @@ def make_good_examples(n, add_class):
             good_examples.append(example + ' 1')
         else:
             good_examples.append(example)
-        good_examples.append(example)
     return good_examples
 
 
@@ -51,7 +50,6 @@ def make_bad_examples(n, add_class):
             bad_examples.append(example + '0')
         else:
             bad_examples.append(example)
-
     return bad_examples
 
 

@@ -5,7 +5,12 @@ import numpy as np
 EMBED_SIZE = 100
 EPOCH = 10
 # TODO change
-VOCAB = "0123456789abcd"
+part = 2
+if part == 1:
+    VOCAB = "0123456789abcd"
+else:
+    VOCAB = [str(i) for i in xrange(10)] + [chr(i) for i in xrange(ord('a'), ord('z'))] + [chr(i) for i in
+                                                                                           xrange(ord('A'), ord('Z'))]
 VOCAB_SIZE = len(VOCAB)
 V2I = {char: i for i, char in enumerate(VOCAB)}
 
@@ -57,10 +62,8 @@ def read_file_and_get_data(file_name):
 
 
 # TODO change
-train_file_name = "train"
-test_file_name = "test"
-train_data = read_file_and_get_data(train_file_name)
-test_data = read_file_and_get_data(test_file_name)
+train_data = read_file_and_get_data("train")
+test_data = read_file_and_get_data("test")
 
 m = dy.Model()
 trainer = dy.AdamTrainer(m)
@@ -79,16 +82,19 @@ for epoch in range(EPOCH):
         sum_of_losses += loss.npvalue()
         loss.backward()
         trainer.update()
-    print "loss: " + str(float(sum_of_losses) / len(train_data)) + " accuracy: " + str(accuracy(train_data))
-    print sum_of_losses / len(train_data)
+    print "loss: " + str(sum_of_losses / len(train_data)) + " accuracy: " + str(accuracy(train_data))
     sum_of_losses = 0.0
 
 # TODO print accuracy
 print "\n\nPrediction time!\n"
 # prediction code:
-for sequence in test_data:
+for sequence, label in test_data:
     dy.renew_cg()  # new computation graph
     vecs = [embeds[V2I[i]] for i in sequence]
     preds = dy.softmax(acceptor(vecs))
     vals = preds.npvalue()
-    print np.argmax(vals), vals
+    loss = dy.pickneglogsoftmax(preds, label)
+    sum_of_losses += loss.npvalue()
+print "loss: " + str(sum_of_losses / len(test_data)) + " accuracy: " + str(accuracy(test_data))
+
+print "Done!"

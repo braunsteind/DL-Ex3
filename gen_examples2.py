@@ -47,7 +47,7 @@ def make_bad_examples(n, add_class):
     for _ in xrange(n):
         example = generate_word()
         if add_class:
-            bad_examples.append(example + '0')
+            bad_examples.append(example + ' 0')
         else:
             bad_examples.append(example)
     return bad_examples

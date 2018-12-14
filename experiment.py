@@ -1,3 +1,6 @@
+STUDENT = {'name': 'Coral Malachi_Daniel Braunstein',
+'ID': '314882853_312510167'}
+
 # -*- coding: utf-8 -*-
 """
     in this file we'll implement acceptor LSTM,
@@ -55,13 +58,7 @@ def get_data(file_name):
         data_set.append(read_line)
     return data_set
 
-# def read_data(file_name):
-#     data = []
-#     row = []
-#     for line in file(file_name):
-#         text = line.strip()
-#         data.append(text)
-#     return data
+
 
 def create_set_loader(dataset,dict):
     new_set = []
@@ -83,34 +80,12 @@ def create_set_loader(dataset,dict):
         new_set.append(new_row)
     return new_set
 
-# def make_data_context(data, w2i):
-#     contexts = []
-#     for row in data:
-#         curr_tag, curr_word = row.split(' ')
-#         context = []
-#         if curr_tag == '1':
-#             curr_tag = 1
-#         elif curr_tag == '0':
-#             curr_tag = 0
-#         else:
-#             print('error')
-#         context.append(curr_tag)
-#         #context.append(w2i['start'])
-#         for i in range(len(curr_word)):
-#             context.append(w2i[curr_word[i]])
-#         #context.append(w2i['end'])
-#         contexts.append(context)
-#     return contexts
 
 def convert_vocab_to_index(vocab):
     words_as_index = {x: i for  i,x in enumerate(vocab)}
     return words_as_index
 
-# def make_indexes_to_data(data):
-#     # strings to IDs
-#     L2I = {l: i for i, l in enumerate(data)}
-#     #I2L = {i: l for l, i in L2I.iteritems()}
-#     return L2I
+
 
 
 

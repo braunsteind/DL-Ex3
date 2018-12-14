@@ -1,7 +1,9 @@
+# -*- coding: utf-8 -*-
+
+
+
 STUDENT = {'name': 'Coral Malachi_Daniel Braunstein',
 'ID': '314882853_312510167'}
-
-# -*- coding: utf-8 -*-
 """
     in this file we'll implement acceptor LSTM,
     that reads in a sequence of vectors, passes the final vector through a

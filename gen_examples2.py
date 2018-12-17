@@ -2,7 +2,7 @@ import random
 
 VOCAB = [str(i) for i in xrange(10)] + [chr(i) for i in xrange(ord('a'), ord('z'))] + [chr(i) for i in
                                                                                        xrange(ord('A'), ord('Z'))]
-WORD_MAX_LEN = 30
+WORD_MAX_LEN = 50
 
 
 def generate_word():

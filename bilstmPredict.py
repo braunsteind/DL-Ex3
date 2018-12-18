@@ -196,7 +196,7 @@ def read_data_test(file_name):
 if __name__ == '__main__':
     is_ner = True
     option =  sys.argv[1]
-    train = list(read_data('copy.txt', is_ner))
+    train = list(read_data('ner/train', is_ner))
 
     if option == 'a':
         words=[]
@@ -298,7 +298,7 @@ if __name__ == '__main__':
     model.populate(sys.argv[2])
 
 
-    test_file = open("test4.ner", "w")
+    test_file = open("test4d.ner", "w")
     test = read_data_test(sys.argv[3])
     for s in test:
         words = [w for w in s]

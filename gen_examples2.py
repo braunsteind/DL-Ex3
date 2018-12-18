@@ -2,7 +2,7 @@ import random
 
 VOCAB = [str(i) for i in xrange(10)] + [chr(i) for i in xrange(ord('a'), ord('z'))] + [chr(i) for i in
                                                                                        xrange(ord('A'), ord('Z'))]
-WORD_MAX_LEN = 30
+WORD_MAX_LEN = 50
 
 
 def generate_word():
@@ -36,7 +36,7 @@ def make_good_examples(n, add_class):
     for _ in xrange(n):
         example = generate_palindrome()
         if add_class:
-            good_examples.append(example + ' 1')
+            good_examples.append('1 ' + example)
         else:
             good_examples.append(example)
     return good_examples
@@ -45,9 +45,21 @@ def make_good_examples(n, add_class):
 def make_bad_examples(n, add_class):
     bad_examples = []
     for _ in xrange(n):
-        example = generate_word()
+        palindrome = generate_palindrome()
+        word = generate_word()
+        # random index
+        index = random.randint(0, len(palindrome) - 1)
+        # add the word to the palindrome
+        example = palindrome[:index] + word + palindrome[index:]
+        # if the example is palindrome
+        while example == example[::-1]:
+            # generate new word
+            word = generate_word()
+            # create new example
+            example = palindrome[:index] + word + palindrome[index:]
+        # add the word inside the palindrome
         if add_class:
-            bad_examples.append(example + ' 0')
+            bad_examples.append('0 ' + example)
         else:
             bad_examples.append(example)
     return bad_examples

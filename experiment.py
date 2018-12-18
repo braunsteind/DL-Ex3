@@ -1,24 +1,18 @@
 # -*- coding: utf-8 -*-
 
 
-
 STUDENT = {'name': 'Coral Malachi_Daniel Braunstein',
-'ID': '314882853_312510167'}
+           'ID': '314882853_312510167'}
 """
     in this file we'll implement acceptor LSTM,
     that reads in a sequence of vectors, passes the final vector through a
     linear layer followed by a softmax, and produces an output.
 """
 
-
-import random
 from time import time
+
 import dynet as dy
 import numpy as np
-
-from collections import defaultdict
-from itertools import count
-import sys
 
 global LAYERS
 global INPUT_DIM
@@ -31,14 +25,20 @@ global num_epochs
 LAYERS = 2
 INPUT_DIM = 30
 HIDDEN_DIM = 35
-vocab = ['a', 'b', 'c', 'd', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+
+part = 2
+if part == 1:
+    vocab = ['a', 'b', 'c', 'd', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+else:
+    vocab = [str(i) for i in xrange(10)] + [chr(i) for i in xrange(ord('a'), ord('z'))] + [chr(i) for i in
+                                                                                           xrange(ord('A'), ord('Z'))]
 VOCAB_SIZE = len(vocab)
 OUTPUT_DIM = 2
 num_epochs = 6
 
 model = dy.Model()
 
-#creates an LSTM unit
+# creates an LSTM unit
 lstm = dy.LSTMBuilder(LAYERS, INPUT_DIM, HIDDEN_DIM, model)
 
 lookup = model.add_lookup_parameters((VOCAB_SIZE, INPUT_DIM))
@@ -47,28 +47,28 @@ lookup = model.add_lookup_parameters((VOCAB_SIZE, INPUT_DIM))
 W_param = model.add_parameters((OUTPUT_DIM, HIDDEN_DIM))
 bias_param = model.add_parameters(OUTPUT_DIM)
 
+
 def get_data(file_name):
     """
 
     :param file:
     :return: the function return the data of the file
     """
-    data_set=[]
-    #loop the text and create a set of words
+    data_set = []
+    # loop the text and create a set of words
     for line in file(file_name):
         read_line = line.strip()
         data_set.append(read_line)
     return data_set
 
 
-
-def create_set_loader(dataset,dict):
+def create_set_loader(dataset, dict):
     new_set = []
     for line in dataset:
-        #define empty array
+        # define empty array
         new_row = []
-        #split line to word and tag
-        m_class,m_word = line.split(' ')
+        # split line to word and tag
+        m_class, m_word = line.split(' ')
 
         if m_class == '0':
             m_class = 0
@@ -84,14 +84,11 @@ def create_set_loader(dataset,dict):
 
 
 def convert_vocab_to_index(vocab):
-    words_as_index = {x: i for  i,x in enumerate(vocab)}
+    words_as_index = {x: i for i, x in enumerate(vocab)}
     return words_as_index
 
 
-
-
-
-def compute_loss( word, tag):
+def compute_loss(word, tag):
     """
 
     :param word:
@@ -112,9 +109,9 @@ def compute_loss( word, tag):
 
     s = s0
 
-    #in rnn each word feeds the network - one after the other
+    # in rnn each word feeds the network - one after the other
     for char in word:
-        #feed network with nect digit
+        # feed network with nect digit
         s = s.add_input(lookup[char])
 
     # MLP
@@ -135,13 +132,13 @@ def compute_loss( word, tag):
     """
 
     loss.backward()
-    #updates parameters of the parameter collection that was passed to its constructor.
+    # updates parameters of the parameter collection that was passed to its constructor.
     trainer.update()
     return loss
 
 
 # make prediction
-def make_prediction( word,tag):
+def make_prediction(word, tag):
     """
 
     :param word:
@@ -152,21 +149,19 @@ def make_prediction( word,tag):
     dy.renew_cg()
     s0 = lstm.initial_state()
 
-    #define model parameters
+    # define model parameters
     W = dy.parameter(W_param)
     bias = dy.parameter(bias_param)
     s = s0
     for char in word:
         s = s.add_input(lookup[char])
 
-
     probs = dy.softmax(W * s.output() + bias)
 
     prediction = np.argmax(probs.npvalue())
-    #calculate loss
+    # calculate loss
     loss = -dy.log(dy.pick(probs, tag))
-    return prediction,loss
-
+    return prediction, loss
 
 
 def compute_accueacy(set):
@@ -179,12 +174,13 @@ def compute_accueacy(set):
     wrong_pred = 0
     for line in set:
         y, x = line[0], line[1:]
-        prediction ,loss= make_prediction(x,y)
+        prediction, loss = make_prediction(x, y)
         if prediction == y:
             correct_count += 1
         else:
             wrong_pred += 1
     return float(correct_count) / float(len(set))
+
 
 if __name__ == '__main__':
     total_loss_train = 0.0
@@ -198,29 +194,29 @@ if __name__ == '__main__':
     train_data = create_set_loader(train, vocab_as_index)
     test_data = create_set_loader(test, vocab_as_index)
 
-    #Create an Adam trainer to update its parameters.
+    # Create an Adam trainer to update its parameters.
     trainer = dy.AdamTrainer(model)
-    #counting time as required
+    # counting time as required
     begin_time = time()
     for epoch in range(num_epochs):
         print "epoch number: " + str(epoch)
 
         for line in train_data:
             tag, word = line[0], line[1:]
-            loss = compute_loss( word, tag)
+            loss = compute_loss(word, tag)
             loss_value = loss.value()
             total_loss_train += loss_value
             loss.backward()
             trainer.update()
 
-        print "train loss: " + str(float(total_loss_train)/float(len(train_data)))
+        print "train loss: " + str(float(total_loss_train) / float(len(train_data)))
         print "train accuracy : " + str(compute_accueacy(train_data))
 
         correct_answers = 0.0
         for line in test_data:
             tag, word = line[0], line[1:]
             # setup the sentence
-            prediction,m_loss = make_prediction( word,tag)
+            prediction, m_loss = make_prediction(word, tag)
 
             # m_loss = dy.pickneglogsoftmax(prediction,tag)
             total_loss_test += m_loss.npvalue()
@@ -231,9 +227,9 @@ if __name__ == '__main__':
         print "number of correct answer: " + str(correct_answers)
         print(len(test_data))
         total_loss_test = 0.0
-        total_loss_train= 0.0
+        total_loss_train = 0.0
         until_now_time = time()
-        print "process time until now is: " + str(until_now_time-begin_time)
+        print "process time until now is: " + str(until_now_time - begin_time)
     end_time = time()
-    process_time = end_time-begin_time
+    process_time = end_time - begin_time
     print "process time is: " + str(process_time)

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import dynet as dy
 import sys
 import numpy as np
@@ -20,11 +22,7 @@ def get_tags(words, vecs):
 
 
 def split_sentence_to_words_and_tags(tagged_sentence):
-    """
-    Split tagged_sentence which is a list of (word,tag) to two lists of: words, tags
-    :param tagged_sentence: tagged sentence example
-    :return: words, tags lists
-    """
+
     words = [word for word, tag in tagged_sentence]
     tags = [tag for word, tag in tagged_sentence]
     return words, tags
@@ -87,8 +85,17 @@ def read_data(file_name, is_ner):
 
 
 def make_indexes_to_data(data):
-    # strings to IDs
+
+    """
+
+    :param data:
+    :return: the function return representation of word as index
+    and of index as words
+    """
+
+    #convert labels to indexes
     L2I = {l: i for i, l in enumerate(data)}
+    #convert indexes to lables
     I2L = {i: l for l, i in L2I.iteritems()}
     return L2I, I2L
 
@@ -103,29 +110,43 @@ def build_tagging_graph(words):
 
 
 def build_tagging_graph1(words):
+    #Create a new computation graph - clears the current one and starts a new one
     dy.renew_cg()
     # parameters -> expressions
+    #Parameters are things need to be trained.
+    #Initialize a parameter vector, and add the parameters to be part of the computation graph.
     H = dy.parameter(pH)
     O = dy.parameter(pO)
 
     # initialize the RNNs
-    f_init = fwdRNN.initial_state()
-    b_init = bwdRNN.initial_state()
+    f_init = fwdRNN.initial_state()#forward
+    b_init = bwdRNN.initial_state()#backword
 
     # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
     wembs = []
     if option == 'a':
         for i, w in enumerate(words):
+            #convert word to an embbeding vector
             wembs.append(word_rep_1(w))
     if option == 'c':
         for i, w in enumerate(words):
             word, pre, suff = word_rep_3(w)
             wembs.append(word + pre + suff)
-    # feed word vectors into biLSTM
-    fw_exps = f_init.transduce(wembs)
-    bw_exps = b_init.transduce(reversed(wembs))
+    #
+    """
+    feed word vectors into biLSTM
+    transduce takes in a sequence of Expressions, and returns a sequence of Expressions
+    """
+    fw_exps = f_init.transduce(wembs)#forward
+    bw_exps = b_init.transduce(reversed(wembs))#backword
 
-    # biLSTM states
+    """
+         biLSTM states
+         
+         Concatenate list of expressions to a single batched expression.
+         All input expressions must have the same shape.
+    """
+
     bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
 
     # feed each biLSTM state to an MLP
@@ -134,7 +155,7 @@ def build_tagging_graph1(words):
         r_t = O * (dy.tanh(H * x))
         exps.append(r_t)
 
-    return exps
+    return exps#results of model
 
 
 def build_tagging_graph2(words):
@@ -171,6 +192,11 @@ def build_tagging_graph2(words):
 
     return exps
 
+# def word_rep_1(w):
+#     if w in vw:
+#         return WORDS_LOOKUP[vw[w]]
+#     else:
+#         return UNK
 
 def word_rep_1(w):
     widx = vw[w] if wc[w] > 5 else UNK
@@ -238,21 +264,36 @@ def tag_sent(words):
 
 
 if __name__ == '__main__':
-    is_ner = True
+    #set train to be pos/ner
+    is_ner = False
     start = time.time()
+    #get the kind of model - a/b/c/d
     option = sys.argv[1]
+    #read the train data
     train = list(read_data(sys.argv[2], is_ner))
-    dev = list(read_data("ner/dev",is_ner))
+    #read the dev data
+    dev = list(read_data("pos/dev",is_ner))
+
+    """
+    if the chosen model is a : 
+    Each word will be represented in an embedding vector
+    """
 
     if option == 'a':
         words = []
         tags = []
         wc = Counter()
+        #loop each line in train set
         for sent in train:
+            #split to word and its tag
             for w, p in sent:
+                #add the current word to the words list
                 words.append(w)
+                # add the current tag to the words tags
                 tags.append(p)
+                #update the counter of current word
                 wc[w] += 1
+        #add the "_UNK_" word to the words list for words we wont see in our training set but will see in the dev/test set
         words.append("_UNK_")
 
     if option == 'b' or option == 'd':
@@ -291,43 +332,67 @@ if __name__ == '__main__':
         words.append("unk-suffix")
         words.append("unk-prefix")
 
+    #for words - convert words to index and index to words
     vw, ix_to_word = make_indexes_to_data(set(words))
+    # for tags - convert tags to index and index to tags
     vt, ix_to_tag = make_indexes_to_data(set(tags))
 
+    #get index of word _UNK_ and save it in UNK varible
     UNK = vw["_UNK_"]
 
+    #get number of different words
     nwords = len(vw)
-    print nwords
-    print 'aaa'
+    #print nwords
+    #print 'aaa'
+
+    # get number of different tags
     ntags = len(vt)
 
-    print("yesh")
+    #init a model with dynet library
     model = dy.Model()
+    #Create an Adam trainer to update the model's parameters.
     trainer = dy.AdamTrainer(model)
 
     if option == 'c':
+        # word embedding matrix
         WORDS_LOOKUP = model.add_lookup_parameters((nwords, 50))
     else:
+        # word embedding matrix
         WORDS_LOOKUP = model.add_lookup_parameters((nwords, 50))
+
 
     if option == 'b' or option == 'd':
         CHARS_LOOKUP = model.add_lookup_parameters((nchars, 50))
 
     # MLP on top of biLSTM outputs 100 -> 32 -> ntags
+
+    #W1 parameter size of hidden layer x 20
     pH = model.add_parameters((200, 10 * 2))
+    #w2 parameter size of number of tags x hidden layer
     pO = model.add_parameters((len(set(tags)), 200))
 
     if option == 'c':
         # word-level LSTMs
+        """
+        VanillaLSTM allows the creation of a “standard” LSTM,
+         ie with decoupled input and forget gates and no peephole connections. 
+        """
         fwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)  # layers, in-dim, out-dim, model
         bwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)
     elif option == 'd':
+        """
+        if the chosen model is d :
+        a concatenation of (a) and (b) followed by a linear layer.
+        that is the reason why the size of the input this time is 100 = 50*2
+        """
         fwdRNN = dy.VanillaLSTMBuilder(1, 100, 10, model)  # layers, in-dim, out-dim, model
         bwdRNN = dy.VanillaLSTMBuilder(1, 100, 10, model)
+
 
         cFwdRNN = dy.VanillaLSTMBuilder(1, 50, 25, model)
         cBwdRNN = dy.VanillaLSTMBuilder(1, 50, 25, model)
     else:
+        #a model
         # word-level LSTMs
         fwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)  # layers, in-dim, out-dim, model
         bwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)
@@ -339,8 +404,10 @@ if __name__ == '__main__':
 
     print ("startup time: %r" % (time.time() - start))
     start = time.time()
+
     acc = []
     i = all_time = all_tagged = this_tagged = this_loss = 0
+    #save the accuracy results for ploting the graph after
     graph = {}
     for ITER in range(5):
         # random.shuffle(train)
@@ -349,25 +416,33 @@ if __name__ == '__main__':
             if i % 500 == 0:  # print status
                 acc = compute_accuracy(dev,"ner")
                 trainer.status()
-                print(this_loss / this_tagged)
+                #print(this_loss / this_tagged)
                 all_tagged += this_tagged
                 this_loss = this_tagged = 0
                 all_time = time.time() - start
                 graph[i / 100] = acc
 
+            """
+            split the current line to words and tags
+            """
             words = [w for w, t in s]
             golds = [t for w, t in s]
 
+            #calculate the loss
             loss_exp = sent_loss(words, golds)
             my_loss = loss_exp.scalar_value()
             this_loss += my_loss;
             this_tagged += len(golds)
+            #performs back-propagation, and accumulates the gradients of the parameters
             loss_exp.backward()
+            #updates parameters of the parameter collection that was passed to its constructor.
             trainer.update()
         print("epoch %r finished" % ITER)
         trainer.update_epoch(1.0)
 
-    with open(option + "_model_" + 'ner' + ".pkl", "wb") as output:
+#save results for ploting the needed graphs later
+    with open(option + "_model_" + 'pos' + ".pkl", "wb") as output:
         pickle.dump(graph, output, pickle.HIGHEST_PROTOCOL)
 
+    #gets a base filename and a list of saveable objects, and saves them to file.
     model.save(sys.argv[3])

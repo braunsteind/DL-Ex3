@@ -1,4 +1,14 @@
 # -*- coding: utf-8 -*-
+WORD_EMBEDDING_DIM = 64
+MLP_DIM = 16
+LSTM_DIM = 32
+# for B model
+CHAR_EMBEDDING_DIM = 20
+CHAR_LSTM_DIM = 64
+
+# for model C
+PREF_EMBEDDING_DIM = 64
+SUFF_EMBEDDING_DIM = 64
 
 import dynet as dy
 import sys
@@ -66,7 +76,7 @@ def read_data(file_name, is_ner):
             print counter
         #when line is empty we finished read the seq
         if len(line.strip()) == 0:
-            sent.append(tuple(('end', 'end')))
+            #sent.append(tuple(('end', 'end')))
             yield sent
             sent = []
             sent.append(tuple(('start', 'start')))
@@ -115,12 +125,14 @@ def build_tagging_graph1(words):
     # parameters -> expressions
     #Parameters are things need to be trained.
     #Initialize a parameter vector, and add the parameters to be part of the computation graph.
-    H = dy.parameter(pH)
-    O = dy.parameter(pO)
+
 
     # initialize the RNNs
     f_init = fwdRNN.initial_state()#forward
     b_init = bwdRNN.initial_state()#backword
+
+    second_forward_initialize = secondfwdRNN.initial_state()
+    second_backward_initialize = secondbwdRNN.initial_state()
 
     # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
     wembs = []
@@ -137,6 +149,8 @@ def build_tagging_graph1(words):
     feed word vectors into biLSTM
     transduce takes in a sequence of Expressions, and returns a sequence of Expressions
     """
+
+    #print wembs.__sizeof__()
     fw_exps = f_init.transduce(wembs)#forward
     bw_exps = b_init.transduce(reversed(wembs))#backword
 
@@ -147,11 +161,23 @@ def build_tagging_graph1(words):
          All input expressions must have the same shape.
     """
 
-    bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
+    # bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
+    bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, bw_exps)]
+
+    #print bi_exps.__sizeof__()
+    # second BILSTM layer, input: b1,b2..bn, output: b'1,b'2, b'3..
+    forward_y_tag = second_forward_initialize.transduce(bi_exps)
+    backward_y_tag = second_backward_initialize.transduce(reversed(bi_exps))
+
+    # concat the results
+    b_tag = [dy.concatenate([y1_tag, y2_tag]) for y1_tag, y2_tag in zip(forward_y_tag, backward_y_tag)]
 
     # feed each biLSTM state to an MLP
+    H = dy.parameter(pH)
+    O = dy.parameter(pO)
+
     exps = []
-    for x in bi_exps:
+    for x in b_tag:
         r_t = O * (dy.tanh(H * x))
         exps.append(r_t)
 
@@ -168,12 +194,15 @@ def build_tagging_graph2(words):
     f_init = fwdRNN.initial_state()
     b_init = bwdRNN.initial_state()
 
+    second_forward_initialize = secondfwdRNN.initial_state()
+    second_backward_initialize = secondbwdRNN.initial_state()
+
     cf_init = cFwdRNN.initial_state()
     cb_init = cBwdRNN.initial_state()
 
     if option == 'b':
         # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
-        wembs = [word_rep_2(w, cf_init, cb_init) for w in words]
+        wembs = [get_word_rep2(w, cf_init) for w in words]
     if option == 'd':
         wembs = [word_rep_4(w, cf_init, cb_init) for w in words]
 
@@ -184,9 +213,16 @@ def build_tagging_graph2(words):
     # biLSTM states
     bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
 
+    # second BILSTM layer, input: b1,b2..bn, output: b'1,b'2, b'3..
+    forward_y_tag = second_forward_initialize.transduce(bi_exps)
+    backward_y_tag = second_backward_initialize.transduce(reversed(bi_exps))
+
+    # concat the results
+    b_tag = [dy.concatenate([y1_tag, y2_tag]) for y1_tag, y2_tag in zip(forward_y_tag, backward_y_tag)]
+
     # feed each biLSTM state to an MLP
     exps = []
-    for x in bi_exps:
+    for x in b_tag:
         r_t = O * (dy.tanh(H * x))
         exps.append(r_t)
 
@@ -202,8 +238,24 @@ def word_rep_1(w):
     widx = vw[w] if wc[w] > 5 else UNK
     return WORDS_LOOKUP[widx]
 
+def get_word_rep2(word,cf_init):
+        """
+        get_word_rep function.
+        :param word: requested word.
+        :return:
+        """
+        char_indexes = []
+        for char in word:
+            if char in vc:
+                char_indexes.append(vc[char])
+            else:
+                char_indexes.append(vc["_UNK_"])
+        char_embedding = [CHARS_LOOKUP[indx] for indx in char_indexes]
 
-def word_rep_2(w, cf_init, cb_init):
+        # calculate y1,y2,..yn and return yn
+        return cf_init.transduce(char_embedding)[-1]
+
+def word_rep_2(w, cf_init):
     if wc[w] > 0:
         w_index = vw[w]
         return WORDS_LOOKUP[w_index]
@@ -212,8 +264,8 @@ def word_rep_2(w, cf_init, cb_init):
         char_ids = [pad_char] + [vc.get(c, CUNK) for c in w] + [pad_char]
         char_embs = [CHARS_LOOKUP[cid] for cid in char_ids]
         fw_exps = cf_init.transduce(char_embs)
-        bw_exps = cb_init.transduce(reversed(char_embs))
-        return dy.concatenate([fw_exps[-1], bw_exps[-1]])
+        #bw_exps = cb_init.transduce(reversed(char_embs))
+        return fw_exps[-1]
 
 
 def word_rep_3(w):
@@ -265,14 +317,14 @@ def tag_sent(words):
 
 if __name__ == '__main__':
     #set train to be pos/ner
-    is_ner = False
+    is_ner = True
     start = time.time()
     #get the kind of model - a/b/c/d
     option = sys.argv[1]
     #read the train data
     train = list(read_data(sys.argv[2], is_ner))
     #read the dev data
-    dev = list(read_data("pos/dev",is_ner))
+    dev = list(read_data("ner/dev",is_ner))
 
     """
     if the chosen model is a : 
@@ -296,14 +348,26 @@ if __name__ == '__main__':
         #add the "_UNK_" word to the words list for words we wont see in our training set but will see in the dev/test set
         words.append("_UNK_")
 
+    """
+        if the chosen model is b : 
+        Each word will be represented in a character-level LSTM
+        
+        if the chosen model is d : 
+        Each word will be represented in a concatenation of (a) and (b) followed by a linear layer     
+        """
+
     if option == 'b' or option == 'd':
         chars = set()
         words = []
         tags = []
         wc = Counter()
+        # loop each line in train set
         for sent in train:
+            # split to word and its tag
             for w, p in sent:
+                # add the current word to the words list
                 words.append(w)
+                # add the current tag to the words tags
                 tags.append(p)
                 chars.update(w)
 
@@ -313,15 +377,27 @@ if __name__ == '__main__':
         chars.add("_UNK_")
 
         vc, ix_to_char = make_indexes_to_data(set(chars))
+        # add the "_UNK_" word to the vector chars list for words we wont see in our training set but will see in the dev/test set
         CUNK = vc["_UNK_"]
+        #get len of chars vectors list
         nchars = len(vc)
+
+
+
+    """
+    if the chosen model is c : 
+    Each word will be represented in the embeddings+subword representation used in assignment 2.
+    """
 
     if option == 'c':
         words = []
         tags = []
         wc = Counter()
+        # loop each line in train set
         for sent in train:
+            # split to word and its tag
             for w, p in sent:
+                # add the current word to the words list
                 words.append(w)
                 if len(w) >= 3:
                     pref = '*prefix*' + w[:3]
@@ -329,6 +405,7 @@ if __name__ == '__main__':
                 tags.append(p)
                 wc[w] += 1
         words.append("_UNK_")
+        #create prefix and suffix for unknown words and append them to the list
         words.append("unk-suffix")
         words.append("unk-prefix")
 
@@ -355,52 +432,74 @@ if __name__ == '__main__':
 
     if option == 'c':
         # word embedding matrix
-        WORDS_LOOKUP = model.add_lookup_parameters((nwords, 50))
+        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBEDDING_DIM))
     else:
         # word embedding matrix
-        WORDS_LOOKUP = model.add_lookup_parameters((nwords, 50))
+        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBEDDING_DIM))
 
 
     if option == 'b' or option == 'd':
-        CHARS_LOOKUP = model.add_lookup_parameters((nchars, 50))
+        """
+            if the chosen model is b : 
+            Each word will be represented in a character-level LSTM
+
+            if the chosen model is d : 
+            Each word will be represented in a concatenation of (a) and (b) followed by a linear layer     
+            """
+        CHARS_LOOKUP = model.add_lookup_parameters((nchars, CHAR_EMBEDDING_DIM))
 
     # MLP on top of biLSTM outputs 100 -> 32 -> ntags
 
     #W1 parameter size of hidden layer x 20
-    pH = model.add_parameters((200, 10 * 2))
+    pH = model.add_parameters((MLP_DIM, WORD_EMBEDDING_DIM))
     #w2 parameter size of number of tags x hidden layer
-    pO = model.add_parameters((len(set(tags)), 200))
+    pO = model.add_parameters((len(set(tags)), MLP_DIM))
 
     if option == 'c':
+        """
+            if the chosen model is c : 
+            Each word will be represented in the embeddings+subword representation used in assignment 2.
+            """
         # word-level LSTMs
         """
         VanillaLSTM allows the creation of a “standard” LSTM,
          ie with decoupled input and forget gates and no peephole connections. 
         """
-        fwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)  # layers, in-dim, out-dim, model
-        bwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)
+
+        # first BILSTM - input: x1,..xn, output: b1,..bn
+        fwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        bwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
+
+        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
     elif option == 'd':
         """
         if the chosen model is d :
         a concatenation of (a) and (b) followed by a linear layer.
         that is the reason why the size of the input this time is 100 = 50*2
         """
-        fwdRNN = dy.VanillaLSTMBuilder(1, 100, 10, model)  # layers, in-dim, out-dim, model
-        bwdRNN = dy.VanillaLSTMBuilder(1, 100, 10, model)
+        fwdRNN = dy.LSTMBuilder(1, 100, 10, model)  # layers, in-dim, out-dim, model
+        bwdRNN = dy.LSTMBuilder(1, 100, 10, model)
+
+        secondfwdRNN = dy.LSTMBuilder(1, 100, 10, model)  # layers, in-dim, out-dim, model
+        secondbwdRNN = dy.LSTMBuilder(1, 100, 10, model)
 
 
-        cFwdRNN = dy.VanillaLSTMBuilder(1, 50, 25, model)
-        cBwdRNN = dy.VanillaLSTMBuilder(1, 50, 25, model)
+        cFwdRNN = dy.LSTMBuilder(1, 50, 25, model)
+        cBwdRNN = dy.LSTMBuilder(1, 50, 25, model)
     else:
-        #a model
+        #a/b model
         # word-level LSTMs
-        fwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)  # layers, in-dim, out-dim, model
-        bwdRNN = dy.VanillaLSTMBuilder(1, 50, 10, model)
+        fwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        bwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
+
+        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
 
     if option == 'b':
         # char-level LSTMs
-        cFwdRNN = dy.VanillaLSTMBuilder(1, 50, 25, model)
-        cBwdRNN = dy.VanillaLSTMBuilder(1, 50, 25, model)
+        cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
+        cBwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
 
     print ("startup time: %r" % (time.time() - start))
     start = time.time()
@@ -413,6 +512,7 @@ if __name__ == '__main__':
         # random.shuffle(train)
         for s in train:
             i += 1
+            print "aaaaaaaaaaaaaaaaaa"
             if i % 500 == 0:  # print status
                 acc = compute_accuracy(dev,"ner")
                 trainer.status()
@@ -429,7 +529,9 @@ if __name__ == '__main__':
             golds = [t for w, t in s]
 
             #calculate the loss
+            print "hereee"
             loss_exp = sent_loss(words, golds)
+            print "hiiii"
             my_loss = loss_exp.scalar_value()
             this_loss += my_loss;
             this_tagged += len(golds)
@@ -441,7 +543,7 @@ if __name__ == '__main__':
         trainer.update_epoch(1.0)
 
 #save results for ploting the needed graphs later
-    with open(option + "_model_" + 'pos' + ".pkl", "wb") as output:
+    with open(option + "_model_" + 'ner_changes' + ".pkl", "wb") as output:
         pickle.dump(graph, output, pickle.HIGHEST_PROTOCOL)
 
     #gets a base filename and a list of saveable objects, and saves them to file.

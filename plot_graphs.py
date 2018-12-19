@@ -8,8 +8,8 @@ def load_accuracy_list(pkl_name):
         dict = pickle.load(dicts_file)
     return co.OrderedDict(sorted(dict.items()))
 
-a_ner = load_accuracy_list("a_model_ner.pkl")
-b_ner = load_accuracy_list("b_model_ner.pkl")
+a_ner = load_accuracy_list("a_model_ner_changes.pkl")
+b_ner = load_accuracy_list("b_model_ner_changes.pkl")
 c_ner = load_accuracy_list("c_model_ner.pkl")
 d_ner = load_accuracy_list("d_model_ner.pkl")
 
@@ -29,8 +29,8 @@ plt.show()
 
 label1, = plt.plot(a_ner.keys(), a_ner.values(), "k-", label='a(ner)')
 label2, = plt.plot(b_ner.keys(), b_ner.values(), "g-", label='b(ner)')
-label3, = plt.plot(c_ner.keys(), c_ner.values(), "r-", label='c(ner)')
-label4, = plt.plot(d_ner.keys(), d_ner.values(), "b-", label='d(ner)')
+# label3, = plt.plot(c_ner.keys(), c_ner.values(), "r-", label='c(ner)')
+# label4, = plt.plot(d_ner.keys(), d_ner.values(), "b-", label='d(ner)')
 
 plt.legend(handler_map={label1: HandlerLine2D(numpoints=4)})
 plt.ylabel("the accuracy")

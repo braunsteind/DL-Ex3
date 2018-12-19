@@ -303,9 +303,9 @@ def read_data_test(file_name):
             sent.append(word)
 
 if __name__ == '__main__':
-    is_ner = True
+    is_ner = False
     option =  sys.argv[1]
-    train = list(read_data('ner/train', is_ner))
+    train = list(read_data('pos/train', is_ner))
 
     if option == 'a':
         words=[]
@@ -427,7 +427,7 @@ if __name__ == '__main__':
     model.populate(sys.argv[2])
 
 
-    test_file = open("test4d_after_fix.ner", "w")
+    test_file = open("test4d_after_fix.pos", "w")
     test = read_data_test(sys.argv[3])
     for s in test:
         words = [w for w in s]

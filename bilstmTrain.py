@@ -6,13 +6,13 @@ STUDENT = {'name': 'Coral Malachi_Daniel Braunstein',
 WORD_EMBEDDING_DIM = 64
 MLP_DIM = 16
 LSTM_DIM = 32
-# for B model
+
+
 CHAR_EMBEDDING_DIM = 20
 CHAR_LSTM_DIM = 64
 
-# for model C
-PREF_EMBEDDING_DIM = 64
-SUFF_EMBEDDING_DIM = 64
+
+
 
 import dynet as dy
 import sys
@@ -55,9 +55,9 @@ def compute_accuracy(tagged_data, type):
     :return: the function count the number of correct predictions. the accuracy is the
             count of correct preds / total number of predictions
     """
-
-    good = 0
     total_words = 0
+    correct_prediction_count = 0
+
     for tagged_sentence in tagged_data:
         words, tags = split_sentence_to_words_and_tags(tagged_sentence)
         #preds = model.get_prediction_on_sentence(words)
@@ -65,23 +65,29 @@ def compute_accuracy(tagged_data, type):
         for pred, tag in zip(preds, tags):
             if type == "pos":
                 if pred == tag:
-                    good += 1
+                    correct_prediction_count += 1
                 total_words += 1
             # we don't consider correct taggings of Other ("O") label on
-            # ner data as good predictions
+            # ner data as correct_prediction_count predictions
             if type == "ner":
                 if pred == "O" and tag == "O":
                     continue
                 elif pred == tag:
-                    good += 1
+                    correct_prediction_count += 1
                 total_words += 1
-        #total_words += len(words)
-    return float(good) / float(total_words) * 100
+        #return the accuracy
+    return float(correct_prediction_count) / float(total_words) * 100
 
 
 # reads train file. adds start*2, end*2 for each sentence for appropriate windows
 # split for words and tags
 def read_data(file_name, is_ner):
+    """
+
+    :param file_name:
+    :param is_ner: indicates about the dataset
+    :return: the function reads the train file. adds start*2, end*2 for each line for appropriate windows
+    """
     #copyfile(file_name, 'copy.txt')
 
     counter = 0
@@ -101,20 +107,21 @@ def read_data(file_name, is_ner):
             continue
         else:
             if (is_ner):
+                #in ner dataset tab is a saperator
                 word_and_tag = line.strip().split("\t")
             else:
+                # in pos dataset " " is a saperator
                 word_and_tag = line.strip().split(" ")
             word = word_and_tag[0]
             tag = word_and_tag[1]
             sent.append(tuple((word, tag)))
 
-        # indexes to data
+
 
 
 def make_indexes_to_data(data):
 
     """
-
     :param data:
     :return: the function return representation of word as index
     and of index as words
@@ -128,6 +135,11 @@ def make_indexes_to_data(data):
 
 
 def build_tagging_graph(words):
+    """
+
+    :param words:
+    :return:the function build the computation graph according to the chosen model
+    """
     if option == 'a' or option == 'c':
         res = build_tagging_graph1(words)
         return res
@@ -137,6 +149,11 @@ def build_tagging_graph(words):
 
 
 def build_tagging_graph1(words):
+    """
+
+    :param words:
+    :return: build new computation graph for the models a/c
+    """
     #Create a new computation graph - clears the current one and starts a new one
     dy.renew_cg()
     # parameters -> expressions
@@ -158,6 +175,7 @@ def build_tagging_graph1(words):
         for i, w in enumerate(words):
             #convert word to an embbeding vector
             wembs.append(word_rep_1(w))
+            # if the model is c - call the right function to get the match represtention
     if option == 'c':
         for i, w in enumerate(words):
             word, pre, suff = word_rep_3(w)
@@ -203,6 +221,11 @@ def build_tagging_graph1(words):
 
 
 def build_tagging_graph2(words):
+    """
+
+        :param words:
+        :return: build new computation graph for the models b/d
+        """
     dy.renew_cg()
     # parameters -> expressions
     H = dy.parameter(pH)
@@ -241,8 +264,8 @@ def build_tagging_graph2(words):
     # feed each biLSTM state to an MLP
     exps = []
     for x in b_tag:
-        r_t = O * (dy.tanh(H * x))
-        exps.append(r_t)
+        ans = O * (dy.tanh(H * x))
+        exps.append(ans)
 
     return exps
 
@@ -253,14 +276,19 @@ def build_tagging_graph2(words):
 #         return UNK
 
 def word_rep_1(w):
-    widx = vw[w] if wc[w] > 5 else UNK
-    return WORDS_LOOKUP[widx]
+    """
+
+    :param w: current word
+    :return: the word represented by chosen model - a
+    """
+    word_index = vw[w] if wc[w] > 5 else UNK
+    return WORDS_LOOKUP[word_index]
 
 def get_word_rep2(word,cf_init):
         """
         get_word_rep function.
-        :param word: requested word.
-        :return:
+        :param word: current word
+        :return:the word represented by chosen model - b
         """
         char_indexes = []
         for char in word:
@@ -268,25 +296,30 @@ def get_word_rep2(word,cf_init):
                 char_indexes.append(vc[char])
             else:
                 char_indexes.append(vc["_UNK_"])
-        char_embedding = [CHARS_LOOKUP[indx] for indx in char_indexes]
+        vec_char_embedding = [CHARS_LOOKUP[i] for i in char_indexes]
 
-        # calculate y1,y2,..yn and return yn
-        return cf_init.transduce(char_embedding)[-1]
+        # calculate y1,...yn and return yn
+        return cf_init.transduce(vec_char_embedding)[-1]
 
-def word_rep_2(w, cf_init):
-    if wc[w] > 0:
-        w_index = vw[w]
-        return WORDS_LOOKUP[w_index]
-    else:
-        pad_char = vc["<*>"]
-        char_ids = [pad_char] + [vc.get(c, CUNK) for c in w] + [pad_char]
-        char_embs = [CHARS_LOOKUP[cid] for cid in char_ids]
-        fw_exps = cf_init.transduce(char_embs)
-        #bw_exps = cb_init.transduce(reversed(char_embs))
-        return fw_exps[-1]
+# def word_rep_2(w, cf_init):
+#     if wc[w] > 0:
+#         w_index = vw[w]
+#         return WORDS_LOOKUP[w_index]
+#     else:
+#         pad_char = vc["<*>"]
+#         char_ids = [pad_char] + [vc.get(c, CUNK) for c in w] + [pad_char]
+#         char_embs = [CHARS_LOOKUP[cid] for cid in char_ids]
+#         fw_exps = cf_init.transduce(char_embs)
+#         #bw_exps = cb_init.transduce(reversed(char_embs))
+#         return fw_exps[-1]
 
 
 def word_rep_3(w):
+    """
+
+    :param word: current word
+    :return:the word represented by chosen model - c
+    """
     unk_prefix = "unk-prefix"
     unk_suffix = "unk-suffix"
     if len(w) >= 3:
@@ -302,14 +335,21 @@ def word_rep_3(w):
 
 
 def word_rep_4(w, cf_init):
-    # making params for linear layer
+    """
+
+        :param word: current word
+        :return:the word represented by chosen model - d
+        """
+    # get params for linear layer
     W = dy.parameter(W_d)
     b = dy.parameter(b_d)
+    #get the representation of each model a and b
     first = word_rep_1(w)
     second = get_word_rep2(w, cf_init)
+    #a concatenation of (a) and (b)
     word_embeddings_d_model =  dy.concatenate([first, second])
 
-    # linear layer calculations
+    # followed by a linear layer
     res = ((W * word_embeddings_d_model) + b)
     return res
 
@@ -342,14 +382,14 @@ def tag_sent(words):
 
 if __name__ == '__main__':
     #set train to be pos/ner
-    is_ner = True
+    is_ner = False
     start = time.time()
     #get the kind of model - a/b/c/d
     option = sys.argv[1]
     #read the train data
     train = list(read_data(sys.argv[2], is_ner))
     #read the dev data
-    dev = list(read_data("ner/dev",is_ner))
+    dev = list(read_data("pos/dev",is_ner))
 
     """
     if the chosen model is a : 
@@ -357,19 +397,20 @@ if __name__ == '__main__':
     """
 
     if option == 'a':
-        words = []
         tags = []
+        words = []
+
         wc = Counter()
         #loop each line in train set
         for sent in train:
             #split to word and its tag
-            for w, p in sent:
+            for word_C, match_tag in sent:
                 #add the current word to the words list
-                words.append(w)
+                words.append(word_C)
                 # add the current tag to the words tags
-                tags.append(p)
+                tags.append(match_tag)
                 #update the counter of current word
-                wc[w] += 1
+                wc[word_C] += 1
         #add the "_UNK_" word to the words list for words we wont see in our training set but will see in the dev/test set
         words.append("_UNK_")
 
@@ -445,7 +486,7 @@ if __name__ == '__main__':
     #get number of different words
     nwords = len(vw)
     #print nwords
-    #print 'aaa'
+
 
     # get number of different tags
     ntags = len(vt)
@@ -476,7 +517,7 @@ if __name__ == '__main__':
             """
         CHARS_LOOKUP = model.add_lookup_parameters((nchars, CHAR_EMBEDDING_DIM))
 
-    # MLP on top of biLSTM outputs 100 -> 32 -> ntags
+    # MLP on top of biLSTM
 
     #W1 parameter size of hidden layer x 20
     pH = model.add_parameters((MLP_DIM, WORD_EMBEDDING_DIM))
@@ -532,20 +573,20 @@ if __name__ == '__main__':
         cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
         cBwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
 
-    print ("startup time: %r" % (time.time() - start))
+    print ("start time: %r" % (time.time() - start))
     start = time.time()
 
     acc = []
     i = all_time = all_tagged = this_tagged = this_loss = 0
     #save the accuracy results for ploting the graph after
     graph = {}
-    for ITER in range(5):
+    for epoch_number in range(5):
         # random.shuffle(train)
         for s in train:
             i += 1
             print "aaaaaaaaaaaaaaaaaa"
             if i % 500 == 0:  # print status
-                acc = compute_accuracy(dev,"ner")
+                acc = compute_accuracy(dev,"pos")
                 trainer.status()
                 #print(this_loss / this_tagged)
                 all_tagged += this_tagged
@@ -557,24 +598,24 @@ if __name__ == '__main__':
             split the current line to words and tags
             """
             words = [w for w, t in s]
-            golds = [t for w, t in s]
+            m_class = [t for w, t in s]
 
             #calculate the loss
             print "hereee"
-            loss_exp = sent_loss(words, golds)
+            loss_exp = sent_loss(words, m_class)
             print "hiiii"
             my_loss = loss_exp.scalar_value()
             this_loss += my_loss;
-            this_tagged += len(golds)
+            this_tagged += len(m_class)
             #performs back-propagation, and accumulates the gradients of the parameters
             loss_exp.backward()
             #updates parameters of the parameter collection that was passed to its constructor.
             trainer.update()
-        print("epoch %r finished" % ITER)
+        print("epoch %r is done" % epoch_number)
         trainer.update_epoch(1.0)
 
 #save results for ploting the needed graphs later
-    with open(option + "_model_" + 'ner_changes' + ".pkl", "wb") as output:
+    with open(option + "_model_" + 'pos_fixed' + ".pkl", "wb") as output:
         pickle.dump(graph, output, pickle.HIGHEST_PROTOCOL)
 
     #gets a base filename and a list of saveable objects, and saves them to file.

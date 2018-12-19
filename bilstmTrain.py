@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+
+STUDENT = {'name': 'Coral Malachi_Daniel Braunstein',
+           'ID': '314882853_312510167'}
+
 WORD_EMBEDDING_DIM = 64
 MLP_DIM = 16
 LSTM_DIM = 32
@@ -23,6 +27,12 @@ import cPickle as pickle
 
 
 def get_tags(words, vecs):
+    """
+
+    :param words:
+    :param vecs:
+    :return: the function predict the right tag of word
+    """
     log_probs = [v.npvalue() for v in vecs]
     tags = []
     for prb in log_probs:
@@ -38,6 +48,13 @@ def split_sentence_to_words_and_tags(tagged_sentence):
     return words, tags
 
 def compute_accuracy(tagged_data, type):
+    """
+
+    :param tagged_data:
+    :param type:
+    :return: the function count the number of correct predictions. the accuracy is the
+            count of correct preds / total number of predictions
+    """
 
     good = 0
     total_words = 0
@@ -65,7 +82,7 @@ def compute_accuracy(tagged_data, type):
 # reads train file. adds start*2, end*2 for each sentence for appropriate windows
 # split for words and tags
 def read_data(file_name, is_ner):
-    copyfile(file_name, 'copy.txt')
+    #copyfile(file_name, 'copy.txt')
 
     counter = 0
     sent = []
@@ -136,6 +153,7 @@ def build_tagging_graph1(words):
 
     # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
     wembs = []
+    #if the model is a - call the right function to get the match represtention
     if option == 'a':
         for i, w in enumerate(words):
             #convert word to an embbeding vector
@@ -204,7 +222,7 @@ def build_tagging_graph2(words):
         # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
         wembs = [get_word_rep2(w, cf_init) for w in words]
     if option == 'd':
-        wembs = [word_rep_4(w, cf_init, cb_init) for w in words]
+        wembs = [word_rep_4(w, cf_init) for w in words]
 
     # feed word vectors into biLSTM
     fw_exps = f_init.transduce(wembs)
@@ -283,10 +301,17 @@ def word_rep_3(w):
     return [WORDS_LOOKUP[widx], WORDS_LOOKUP[preidx], WORDS_LOOKUP[suffidx]]
 
 
-def word_rep_4(w, cf_init, cb_init):
+def word_rep_4(w, cf_init):
+    # making params for linear layer
+    W = dy.parameter(W_d)
+    b = dy.parameter(b_d)
     first = word_rep_1(w)
-    second = word_rep_2(w, cf_init, cb_init)
-    return dy.concatenate([first, second])
+    second = get_word_rep2(w, cf_init)
+    word_embeddings_d_model =  dy.concatenate([first, second])
+
+    # linear layer calculations
+    res = ((W * word_embeddings_d_model) + b)
+    return res
 
 
 def sent_loss_precalc(words, tags, vecs):
@@ -424,9 +449,12 @@ if __name__ == '__main__':
 
     # get number of different tags
     ntags = len(vt)
+    print (vt)
+    print ntags
 
     #init a model with dynet library
-    model = dy.Model()
+    #model = dy.Model()
+    model = dy.ParameterCollection()
     #Create an Adam trainer to update the model's parameters.
     trainer = dy.AdamTrainer(model)
 
@@ -478,14 +506,17 @@ if __name__ == '__main__':
         a concatenation of (a) and (b) followed by a linear layer.
         that is the reason why the size of the input this time is 100 = 50*2
         """
-        fwdRNN = dy.LSTMBuilder(1, 100, 10, model)  # layers, in-dim, out-dim, model
-        bwdRNN = dy.LSTMBuilder(1, 100, 10, model)
+        fwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        bwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
 
-        secondfwdRNN = dy.LSTMBuilder(1, 100, 10, model)  # layers, in-dim, out-dim, model
-        secondbwdRNN = dy.LSTMBuilder(1, 100, 10, model)
+        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
 
 
-        cFwdRNN = dy.LSTMBuilder(1, 50, 25, model)
+        cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
+
+        W_d = model.add_parameters((WORD_EMBEDDING_DIM, WORD_EMBEDDING_DIM * 2))
+        b_d = model.add_parameters((WORD_EMBEDDING_DIM))
         cBwdRNN = dy.LSTMBuilder(1, 50, 25, model)
     else:
         #a/b model

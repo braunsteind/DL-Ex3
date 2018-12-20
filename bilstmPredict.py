@@ -233,21 +233,6 @@ def build_computation_graph_for_b_or_d(words):
 
 
 
-def word_rep_2(w, cf_init, cb_init):
-    if wc[w] > 0:
-        w_index = vw[w]
-        return WORDS_LOOKUP[w_index]
-    else:
-        pad_char = vc["<*>"]
-        char_ids = [pad_char] + [vc.get(c,CUNK) for c in w] + [pad_char]
-        char_embs = [CHARS_LOOKUP[cid] for cid in char_ids]
-        fw_exps = cf_init.transduce(char_embs)
-        bw_exps = cb_init.transduce(reversed(char_embs))
-        return dy.concatenate([ fw_exps[-1], bw_exps[-1] ])
-
-
-
-
 def get_word_rep_d(w, cf_init):
     # making params for linear layer
     W = dy.parameter(W_d)

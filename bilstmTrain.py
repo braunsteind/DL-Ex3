@@ -3,13 +3,16 @@
 STUDENT = {'name': 'Coral Malachi_Daniel Braunstein',
            'ID': '314882853_312510167'}
 
-WORD_EMBEDDING_DIM = 64
-MLP_DIM = 16
+#lets define some consts :
+CHAR_EMBED_DIM = 20
+PREFIX = '*prefix*'
 LSTM_DIM = 32
-
-
-CHAR_EMBEDDING_DIM = 20
+SUFFIX = '*suffix*'
+WORD_EMBED_DIM = 64
+UNK_PREF = "unk-prefix"
+MLP_SIZE = 16
 CHAR_LSTM_DIM = 64
+UNK_SUF = "unk-suffix"
 
 
 
@@ -41,13 +44,32 @@ def get_tags(words, vecs):
     return tags
 
 
-def split_sentence_to_words_and_tags(tagged_sentence):
+def split_line(line):
+    """
 
-    words = [word for word, tag in tagged_sentence]
-    tags = [tag for word, tag in tagged_sentence]
-    return words, tags
+    :param line:
+    :return: the function get a line as an input and return thw words in this line and their tags
+    """
 
-def compute_accuracy(tagged_data, type):
+    words_after_split = [word for word, tag in line]
+    tags_after_split = [tag for word, tag in line]
+    return words_after_split, tags_after_split
+
+def convert_indexes_to_words(data):
+
+    """
+    :param data:
+    :return: the function return representation of word as index
+    and of index as words
+    """
+
+    #convert labels to indexes
+    labels_to_indexes = {l: i for i, l in enumerate(data)}
+    #convert indexes to lables
+    Index_to_labels = {i: l for l, i in labels_to_indexes.iteritems()}
+    return labels_to_indexes, Index_to_labels
+
+def calculate_accuracy(tagged_data, type):
     """
 
     :param tagged_data:
@@ -59,9 +81,9 @@ def compute_accuracy(tagged_data, type):
     correct_prediction_count = 0
 
     for tagged_sentence in tagged_data:
-        words, tags = split_sentence_to_words_and_tags(tagged_sentence)
+        words, tags = split_line(tagged_sentence)
         #preds = model.get_prediction_on_sentence(words)
-        preds = get_tags(words,build_tagging_graph(words))
+        preds = get_tags(words,create_computation_graph(words))
         for pred, tag in zip(preds, tags):
             if type == "pos":
                 if pred == tag:
@@ -119,36 +141,24 @@ def read_data(file_name, is_ner):
 
 
 
-def make_indexes_to_data(data):
 
-    """
-    :param data:
-    :return: the function return representation of word as index
-    and of index as words
+
+
+def create_computation_graph(m_input):
     """
 
-    #convert labels to indexes
-    L2I = {l: i for i, l in enumerate(data)}
-    #convert indexes to lables
-    I2L = {i: l for l, i in L2I.iteritems()}
-    return L2I, I2L
-
-
-def build_tagging_graph(words):
-    """
-
-    :param words:
+    :param m_input:
     :return:the function build the computation graph according to the chosen model
     """
-    if option == 'a' or option == 'c':
-        res = build_tagging_graph1(words)
+    if chosen_model == 'c' or chosen_model == 'a':
+        res = build_computation_graph_for_a_or_c(m_input)
         return res
-    if option == 'b' or option == 'd':
-        res = build_tagging_graph2(words)
+    if chosen_model == 'b' or chosen_model == 'd':
+        res = build_computation_graph_for_b_or_d(m_input)
         return res
 
 
-def build_tagging_graph1(words):
+def build_computation_graph_for_a_or_c(words):
     """
 
     :param words:
@@ -156,7 +166,7 @@ def build_tagging_graph1(words):
     """
     #Create a new computation graph - clears the current one and starts a new one
     dy.renew_cg()
-    # parameters -> expressions
+
     #Parameters are things need to be trained.
     #Initialize a parameter vector, and add the parameters to be part of the computation graph.
 
@@ -171,12 +181,12 @@ def build_tagging_graph1(words):
     # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
     wembs = []
     #if the model is a - call the right function to get the match represtention
-    if option == 'a':
+    if chosen_model == 'a':
         for i, w in enumerate(words):
             #convert word to an embbeding vector
-            wembs.append(word_rep_1(w))
+            wembs.append(get_word_rep_a(w))
             # if the model is c - call the right function to get the match represtention
-    if option == 'c':
+    if chosen_model == 'c':
         for i, w in enumerate(words):
             word, pre, suff = word_rep_3(w)
             wembs.append(word + pre + suff)
@@ -197,13 +207,13 @@ def build_tagging_graph1(words):
          All input expressions must have the same shape.
     """
 
-    # bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
-    bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, bw_exps)]
+    # bi_first = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
+    bi_first = [dy.concatenate([f, b]) for f, b in zip(fw_exps, bw_exps)]
 
-    #print bi_exps.__sizeof__()
+    #print bi_first.__sizeof__()
     # second BILSTM layer, input: b1,b2..bn, output: b'1,b'2, b'3..
-    forward_y_tag = second_forward_initialize.transduce(bi_exps)
-    backward_y_tag = second_backward_initialize.transduce(reversed(bi_exps))
+    forward_y_tag = second_forward_initialize.transduce(bi_first)
+    backward_y_tag = second_backward_initialize.transduce(reversed(bi_first))
 
     # concat the results
     b_tag = [dy.concatenate([y1_tag, y2_tag]) for y1_tag, y2_tag in zip(forward_y_tag, backward_y_tag)]
@@ -220,7 +230,7 @@ def build_tagging_graph1(words):
     return exps#results of model
 
 
-def build_tagging_graph2(words):
+def build_computation_graph_for_b_or_d(words):
     """
 
         :param words:
@@ -241,22 +251,22 @@ def build_tagging_graph2(words):
     cf_init = cFwdRNN.initial_state()
     cb_init = cBwdRNN.initial_state()
 
-    if option == 'b':
+    if chosen_model == 'b':
         # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
         wembs = [get_word_rep2(w, cf_init) for w in words]
-    if option == 'd':
-        wembs = [word_rep_4(w, cf_init) for w in words]
+    if chosen_model == 'd':
+        wembs = [get_word_rep_d(w, cf_init) for w in words]
 
     # feed word vectors into biLSTM
     fw_exps = f_init.transduce(wembs)
     bw_exps = b_init.transduce(reversed(wembs))
 
     # biLSTM states
-    bi_exps = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
+    bi_first = [dy.concatenate([f, b]) for f, b in zip(fw_exps, reversed(bw_exps))]
 
     # second BILSTM layer, input: b1,b2..bn, output: b'1,b'2, b'3..
-    forward_y_tag = second_forward_initialize.transduce(bi_exps)
-    backward_y_tag = second_backward_initialize.transduce(reversed(bi_exps))
+    forward_y_tag = second_forward_initialize.transduce(bi_first)
+    backward_y_tag = second_backward_initialize.transduce(reversed(bi_first))
 
     # concat the results
     b_tag = [dy.concatenate([y1_tag, y2_tag]) for y1_tag, y2_tag in zip(forward_y_tag, backward_y_tag)]
@@ -269,13 +279,13 @@ def build_tagging_graph2(words):
 
     return exps
 
-# def word_rep_1(w):
+# def get_word_rep_a(w):
 #     if w in vw:
 #         return WORDS_LOOKUP[vw[w]]
 #     else:
 #         return UNK
 
-def word_rep_1(w):
+def get_word_rep_a(w):
     """
 
     :param w: current word
@@ -301,17 +311,6 @@ def get_word_rep2(word,cf_init):
         # calculate y1,...yn and return yn
         return cf_init.transduce(vec_char_embedding)[-1]
 
-# def word_rep_2(w, cf_init):
-#     if wc[w] > 0:
-#         w_index = vw[w]
-#         return WORDS_LOOKUP[w_index]
-#     else:
-#         pad_char = vc["<*>"]
-#         char_ids = [pad_char] + [vc.get(c, CUNK) for c in w] + [pad_char]
-#         char_embs = [CHARS_LOOKUP[cid] for cid in char_ids]
-#         fw_exps = cf_init.transduce(char_embs)
-#         #bw_exps = cb_init.transduce(reversed(char_embs))
-#         return fw_exps[-1]
 
 
 def word_rep_3(w):
@@ -320,11 +319,11 @@ def word_rep_3(w):
     :param word: current word
     :return:the word represented by chosen model - c
     """
-    unk_prefix = "unk-prefix"
-    unk_suffix = "unk-suffix"
+    unk_prefix = UNK_PREF
+    unk_suffix = UNK_SUF
     if len(w) >= 3:
-        pref = '*prefix*' + w[:3]
-        suff = '*suffix*' + w[-3:]
+        pref = PREFIX + w[:3]
+        suff = SUFFIX + w[-3:]
     else:
         pref = unk_prefix
         suff = unk_suffix
@@ -334,7 +333,7 @@ def word_rep_3(w):
     return [WORDS_LOOKUP[widx], WORDS_LOOKUP[preidx], WORDS_LOOKUP[suffidx]]
 
 
-def word_rep_4(w, cf_init):
+def get_word_rep_d(w, cf_init):
     """
 
         :param word: current word
@@ -344,7 +343,7 @@ def word_rep_4(w, cf_init):
     W = dy.parameter(W_d)
     b = dy.parameter(b_d)
     #get the representation of each model a and b
-    first = word_rep_1(w)
+    first = get_word_rep_a(w)
     second = get_word_rep2(w, cf_init)
     #a concatenation of (a) and (b)
     word_embeddings_d_model =  dy.concatenate([first, second])
@@ -354,30 +353,21 @@ def word_rep_4(w, cf_init):
     return res
 
 
-def sent_loss_precalc(words, tags, vecs):
-    errs = []
+def calc_loss(words, tags, vecs):
+    #define an empty list
+    m_losses = []
     for v, t in zip(vecs, tags):
         tid = vt[t]
+        #compute loss
         err = dy.pickneglogsoftmax(v, tid)
-        errs.append(err)
-    return dy.esum(errs)
+        #append current loss to list
+        m_losses.append(err)
+    return dy.esum(m_losses)
 
 
 def sent_loss(words, tags):
-    return sent_loss_precalc(words, tags, build_tagging_graph(words))
+    return calc_loss(words, tags, create_computation_graph(words))
 
-
-def tag_sent_precalc(words, vecs):
-    log_probs = [v.npvalue() for v in vecs]
-    tags = []
-    for prb in log_probs:
-        tag = np.argmax(prb)
-        tags.append(ix_to_tag[tag])
-    return zip(words, tags)
-
-
-def tag_sent(words):
-    return tag_sent_precalc(words, build_tagging_graph(words))
 
 
 if __name__ == '__main__':
@@ -385,7 +375,7 @@ if __name__ == '__main__':
     is_ner = False
     start = time.time()
     #get the kind of model - a/b/c/d
-    option = sys.argv[1]
+    chosen_model = sys.argv[1]
     #read the train data
     train = list(read_data(sys.argv[2], is_ner))
     #read the dev data
@@ -396,7 +386,7 @@ if __name__ == '__main__':
     Each word will be represented in an embedding vector
     """
 
-    if option == 'a':
+    if chosen_model == 'a':
         tags = []
         words = []
 
@@ -422,7 +412,7 @@ if __name__ == '__main__':
         Each word will be represented in a concatenation of (a) and (b) followed by a linear layer     
         """
 
-    if option == 'b' or option == 'd':
+    if chosen_model == 'b' or chosen_model == 'd':
         chars = set()
         words = []
         tags = []
@@ -442,7 +432,7 @@ if __name__ == '__main__':
         chars.add("<*>")
         chars.add("_UNK_")
 
-        vc, ix_to_char = make_indexes_to_data(set(chars))
+        vc, ix_to_char = convert_indexes_to_words(set(chars))
         # add the "_UNK_" word to the vector chars list for words we wont see in our training set but will see in the dev/test set
         CUNK = vc["_UNK_"]
         #get len of chars vectors list
@@ -455,7 +445,7 @@ if __name__ == '__main__':
     Each word will be represented in the embeddings+subword representation used in assignment 2.
     """
 
-    if option == 'c':
+    if chosen_model == 'c':
         words = []
         tags = []
         wc = Counter()
@@ -466,19 +456,19 @@ if __name__ == '__main__':
                 # add the current word to the words list
                 words.append(w)
                 if len(w) >= 3:
-                    pref = '*prefix*' + w[:3]
-                    suff = '*suffix*' + w[-3:]
+                    pref = PREFIX + w[:3]
+                    suff = SUFFIX + w[-3:]
                 tags.append(p)
                 wc[w] += 1
         words.append("_UNK_")
         #create prefix and suffix for unknown words and append them to the list
-        words.append("unk-suffix")
-        words.append("unk-prefix")
+        words.append(UNK_SUF)
+        words.append(UNK_PREF)
 
     #for words - convert words to index and index to words
-    vw, ix_to_word = make_indexes_to_data(set(words))
+    vw, ix_to_word = convert_indexes_to_words(set(words))
     # for tags - convert tags to index and index to tags
-    vt, ix_to_tag = make_indexes_to_data(set(tags))
+    vt, ix_to_tag = convert_indexes_to_words(set(tags))
 
     #get index of word _UNK_ and save it in UNK varible
     UNK = vw["_UNK_"]
@@ -499,15 +489,15 @@ if __name__ == '__main__':
     #Create an Adam trainer to update the model's parameters.
     trainer = dy.AdamTrainer(model)
 
-    if option == 'c':
+    if chosen_model == 'c':
         # word embedding matrix
-        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBEDDING_DIM))
+        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBED_DIM))
     else:
         # word embedding matrix
-        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBEDDING_DIM))
+        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBED_DIM))
 
 
-    if option == 'b' or option == 'd':
+    if chosen_model == 'b' or chosen_model == 'd':
         """
             if the chosen model is b : 
             Each word will be represented in a character-level LSTM
@@ -515,16 +505,16 @@ if __name__ == '__main__':
             if the chosen model is d : 
             Each word will be represented in a concatenation of (a) and (b) followed by a linear layer     
             """
-        CHARS_LOOKUP = model.add_lookup_parameters((nchars, CHAR_EMBEDDING_DIM))
+        CHARS_LOOKUP = model.add_lookup_parameters((nchars, CHAR_EMBED_DIM))
 
     # MLP on top of biLSTM
 
-    #W1 parameter size of hidden layer x 20
-    pH = model.add_parameters((MLP_DIM, WORD_EMBEDDING_DIM))
-    #w2 parameter size of number of tags x hidden layer
-    pO = model.add_parameters((len(set(tags)), MLP_DIM))
 
-    if option == 'c':
+    pH = model.add_parameters((MLP_SIZE, WORD_EMBED_DIM))
+    #w2 parameter size of number of tags x hidden layer
+    pO = model.add_parameters((len(set(tags)), MLP_SIZE))
+
+    if chosen_model == 'c':
         """
             if the chosen model is c : 
             Each word will be represented in the embeddings+subword representation used in assignment 2.
@@ -536,42 +526,42 @@ if __name__ == '__main__':
         """
 
         # first BILSTM - input: x1,..xn, output: b1,..bn
-        fwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
-        bwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
+        fwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        bwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
-        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
-        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
-    elif option == 'd':
+        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
+    elif chosen_model == 'd':
         """
         if the chosen model is d :
         a concatenation of (a) and (b) followed by a linear layer.
         that is the reason why the size of the input this time is 100 = 50*2
         """
-        fwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
-        bwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
+        fwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        bwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
-        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
-        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
+        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
 
-        cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
+        cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBED_DIM, CHAR_LSTM_DIM, model)
 
-        W_d = model.add_parameters((WORD_EMBEDDING_DIM, WORD_EMBEDDING_DIM * 2))
-        b_d = model.add_parameters((WORD_EMBEDDING_DIM))
+        W_d = model.add_parameters((WORD_EMBED_DIM, WORD_EMBED_DIM * 2))
+        b_d = model.add_parameters((WORD_EMBED_DIM))
         cBwdRNN = dy.LSTMBuilder(1, 50, 25, model)
     else:
         #a/b model
         # word-level LSTMs
-        fwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
-        bwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
+        fwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        bwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
-        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
-        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBEDDING_DIM, LSTM_DIM, model)
+        secondfwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
+        secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
-    if option == 'b':
+    if chosen_model == 'b':
         # char-level LSTMs
-        cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
-        cBwdRNN = dy.LSTMBuilder(1, CHAR_EMBEDDING_DIM, CHAR_LSTM_DIM, model)
+        cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBED_DIM, CHAR_LSTM_DIM, model)
+        cBwdRNN = dy.LSTMBuilder(1, CHAR_EMBED_DIM, CHAR_LSTM_DIM, model)
 
     print ("start time: %r" % (time.time() - start))
     start = time.time()
@@ -586,7 +576,7 @@ if __name__ == '__main__':
             i += 1
             print "aaaaaaaaaaaaaaaaaa"
             if i % 500 == 0:  # print status
-                acc = compute_accuracy(dev,"pos")
+                acc = calculate_accuracy(dev,"pos")
                 trainer.status()
                 #print(this_loss / this_tagged)
                 all_tagged += this_tagged
@@ -605,7 +595,7 @@ if __name__ == '__main__':
             loss_exp = sent_loss(words, m_class)
             print "hiiii"
             my_loss = loss_exp.scalar_value()
-            this_loss += my_loss;
+            this_loss += my_loss
             this_tagged += len(m_class)
             #performs back-propagation, and accumulates the gradients of the parameters
             loss_exp.backward()
@@ -615,7 +605,7 @@ if __name__ == '__main__':
         trainer.update_epoch(1.0)
 
 #save results for ploting the needed graphs later
-    with open(option + "_model_" + 'pos_fixed' + ".pkl", "wb") as output:
+    with open(chosen_model + "_model_" + 'pos_fixed' + ".pkl", "wb") as output:
         pickle.dump(graph, output, pickle.HIGHEST_PROTOCOL)
 
     #gets a base filename and a list of saveable objects, and saves them to file.

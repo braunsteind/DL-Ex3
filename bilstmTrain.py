@@ -4,6 +4,7 @@ STUDENT = {'name': 'Coral Malachi_Daniel Braunstein',
            'ID': '314882853_312510167'}
 
 #lets define some consts :
+
 CHAR_EMBED_DIM = 20
 PREFIX = '*prefix*'
 LSTM_DIM = 32
@@ -55,43 +56,44 @@ def split_line(line):
     tags_after_split = [tag for word, tag in line]
     return words_after_split, tags_after_split
 
-def convert_indexes_to_words(data):
+def convert_indexes_to_words(data_to_convert):
 
     """
-    :param data:
+    :param data_to_convert:
     :return: the function return representation of word as index
     and of index as words
     """
 
     #convert labels to indexes
-    labels_to_indexes = {l: i for i, l in enumerate(data)}
+    labels_to_indexes = {l: i for i, l in enumerate(data_to_convert)}
     #convert indexes to lables
     Index_to_labels = {i: l for l, i in labels_to_indexes.iteritems()}
     return labels_to_indexes, Index_to_labels
 
-def calculate_accuracy(tagged_data, type):
+def calculate_accuracy(data, ner_or_pos):
     """
 
-    :param tagged_data:
-    :param type:
+    :param data:
+    :param ner_or_pos:
     :return: the function count the number of correct predictions. the accuracy is the
             count of correct preds / total number of predictions
     """
     total_words = 0
     correct_prediction_count = 0
 
-    for tagged_sentence in tagged_data:
-        words, tags = split_line(tagged_sentence)
+    for line_tagged in data:
+        #first split line to word ant their tags
+        words, tags = split_line(line_tagged)
         #preds = model.get_prediction_on_sentence(words)
         preds = get_tags(words,create_computation_graph(words))
         for pred, tag in zip(preds, tags):
-            if type == "pos":
+            if ner_or_pos == "pos":
                 if pred == tag:
                     correct_prediction_count += 1
                 total_words += 1
             # we don't consider correct taggings of Other ("O") label on
             # ner data as correct_prediction_count predictions
-            if type == "ner":
+            if ner_or_pos == "ner":
                 if pred == "O" and tag == "O":
                     continue
                 elif pred == tag:
@@ -99,50 +101,6 @@ def calculate_accuracy(tagged_data, type):
                 total_words += 1
         #return the accuracy
     return float(correct_prediction_count) / float(total_words) * 100
-
-
-# reads train file. adds start*2, end*2 for each sentence for appropriate windows
-# split for words and tags
-def read_data(file_name, is_ner):
-    """
-
-    :param file_name:
-    :param is_ner: indicates about the dataset
-    :return: the function reads the train file. adds start*2, end*2 for each line for appropriate windows
-    """
-    #copyfile(file_name, 'copy.txt')
-
-    counter = 0
-    sent = []
-    sent.append(tuple(('start', 'start')))
-    for line in file(file_name):
-        counter += 1
-        if (counter % 5000 == 0):
-            print counter
-        #when line is empty we finished read the seq
-        if len(line.strip()) == 0:
-            #sent.append(tuple(('end', 'end')))
-            yield sent
-            sent = []
-            sent.append(tuple(('start', 'start')))
-        elif len(line.strip()) == 1:
-            continue
-        else:
-            if (is_ner):
-                #in ner dataset tab is a saperator
-                word_and_tag = line.strip().split("\t")
-            else:
-                # in pos dataset " " is a saperator
-                word_and_tag = line.strip().split(" ")
-            word = word_and_tag[0]
-            tag = word_and_tag[1]
-            sent.append(tuple((word, tag)))
-
-
-
-
-
-
 
 def create_computation_graph(m_input):
     """
@@ -157,6 +115,50 @@ def create_computation_graph(m_input):
         res = build_computation_graph_for_b_or_d(m_input)
         return res
 
+# reads train file. adds start*2, end*2 for each sentence for appropriate windows
+# split for words and tags
+def read_data(file_name, is_set_ner):
+    """
+
+    :param file_name:
+    :param is_set_ner: indicates about the dataset
+    :return: the function reads the train file. adds start*2, end*2 for each line for appropriate windows
+    """
+
+
+    counter = 0
+    reading_line = []
+    reading_line.append(tuple(('start', 'start')))
+    for line in file(file_name):
+        counter += 1
+        if (counter % 1000 == 0):
+            print counter
+        #when line is empty we finished read the seq
+        if len(line.strip()) == 0:
+            #reading_line.append(tuple(('end', 'end')))
+            """
+            yield is a keyword that is used like return, except the function will return a generator.
+            Generators are iterators, a kind of iterable you can only iterate over once. Generators do not
+             store all the values in memory, they generate the values on the fly
+            """
+            yield reading_line
+            reading_line = []
+            reading_line.append(tuple(('start', 'start')))
+        elif len(line.strip()) == 1:
+            continue
+        else:
+            if (is_set_ner):
+                #in ner dataset tab is a saperator
+                word_and_tag = line.strip().split("\t")
+            else:
+                # in pos dataset " " is a saperator
+                word_and_tag = line.strip().split(" ")
+            word = word_and_tag[0]
+            tag = word_and_tag[1]
+            #add to reading_line the word and its tag
+            reading_line.append(tuple((word, tag)))
+
+
 
 def build_computation_graph_for_a_or_c(words):
     """
@@ -166,20 +168,21 @@ def build_computation_graph_for_a_or_c(words):
     """
     #Create a new computation graph - clears the current one and starts a new one
     dy.renew_cg()
+    wembs = []
 
     #Parameters are things need to be trained.
     #Initialize a parameter vector, and add the parameters to be part of the computation graph.
 
 
     # initialize the RNNs
-    f_init = fwdRNN.initial_state()#forward
-    b_init = bwdRNN.initial_state()#backword
+    forward_init1 = fwdRNN.initial_state()#forward
+    backword_init1 = bwdRNN.initial_state()#backword
 
     second_forward_initialize = secondfwdRNN.initial_state()
     second_backward_initialize = secondbwdRNN.initial_state()
 
     # get the word vectors. word_rep(...) returns a 128-dim vector expression for each word.
-    wembs = []
+
     #if the model is a - call the right function to get the match represtention
     if chosen_model == 'a':
         for i, w in enumerate(words):
@@ -188,7 +191,7 @@ def build_computation_graph_for_a_or_c(words):
             # if the model is c - call the right function to get the match represtention
     if chosen_model == 'c':
         for i, w in enumerate(words):
-            word, pre, suff = word_rep_3(w)
+            word, pre, suff = get_word_rep_c(w)
             wembs.append(word + pre + suff)
     #
     """
@@ -197,8 +200,8 @@ def build_computation_graph_for_a_or_c(words):
     """
 
     #print wembs.__sizeof__()
-    fw_exps = f_init.transduce(wembs)#forward
-    bw_exps = b_init.transduce(reversed(wembs))#backword
+    fw_exps = forward_init1.transduce(wembs)#forward
+    bw_exps = backword_init1.transduce(reversed(wembs))#backword
 
     """
          biLSTM states
@@ -281,7 +284,7 @@ def build_computation_graph_for_b_or_d(words):
 
 # def get_word_rep_a(w):
 #     if w in vw:
-#         return WORDS_LOOKUP[vw[w]]
+#         return WORDS_SET_LOOKUP[vw[w]]
 #     else:
 #         return UNK
 
@@ -292,7 +295,7 @@ def get_word_rep_a(w):
     :return: the word represented by chosen model - a
     """
     word_index = vw[w] if wc[w] > 5 else UNK
-    return WORDS_LOOKUP[word_index]
+    return WORDS_SET_LOOKUP[word_index]
 
 def get_word_rep2(word,cf_init):
         """
@@ -306,51 +309,35 @@ def get_word_rep2(word,cf_init):
                 char_indexes.append(vc[char])
             else:
                 char_indexes.append(vc["_UNK_"])
-        vec_char_embedding = [CHARS_LOOKUP[i] for i in char_indexes]
+        vec_char_embedding = [CHARS_SET_LOOKUP[i] for i in char_indexes]
 
         # calculate y1,...yn and return yn
         return cf_init.transduce(vec_char_embedding)[-1]
 
 
 
-def word_rep_3(w):
+def get_word_rep_c(word):
     """
 
     :param word: current word
     :return:the word represented by chosen model - c
     """
-    unk_prefix = UNK_PREF
     unk_suffix = UNK_SUF
-    if len(w) >= 3:
-        pref = PREFIX + w[:3]
-        suff = SUFFIX + w[-3:]
+    unk_prefix = UNK_PREF
+
+    if len(word) >= 3:
+        pref = PREFIX + word[:3]
+        suff = SUFFIX + word[-3:]
     else:
         pref = unk_prefix
         suff = unk_suffix
-    widx = vw[w] if wc[w] > 5 else UNK
-    preidx = vw[pref] if wc[pref] > 5 else vw[unk_prefix]
-    suffidx = vw[suff] if wc[suff] > 5 else vw[unk_suffix]
-    return [WORDS_LOOKUP[widx], WORDS_LOOKUP[preidx], WORDS_LOOKUP[suffidx]]
+    words_index = vw[word] if wc[word] > 5 else UNK
+    preffix_index = vw[pref] if wc[pref] > 5 else vw[unk_prefix]
+    suffix_index = vw[suff] if wc[suff] > 5 else vw[unk_suffix]
+    return [WORDS_SET_LOOKUP[words_index], WORDS_SET_LOOKUP[preffix_index], WORDS_SET_LOOKUP[suffix_index]]
 
 
-def get_word_rep_d(w, cf_init):
-    """
 
-        :param word: current word
-        :return:the word represented by chosen model - d
-        """
-    # get params for linear layer
-    W = dy.parameter(W_d)
-    b = dy.parameter(b_d)
-    #get the representation of each model a and b
-    first = get_word_rep_a(w)
-    second = get_word_rep2(w, cf_init)
-    #a concatenation of (a) and (b)
-    word_embeddings_d_model =  dy.concatenate([first, second])
-
-    # followed by a linear layer
-    res = ((W * word_embeddings_d_model) + b)
-    return res
 
 
 def calc_loss(words, tags, vecs):
@@ -364,22 +351,45 @@ def calc_loss(words, tags, vecs):
         m_losses.append(err)
     return dy.esum(m_losses)
 
+def get_word_rep_d(w, concat_forward_init):
+    """
 
-def sent_loss(words, tags):
-    return calc_loss(words, tags, create_computation_graph(words))
+        :param word: current word
+        :return:the word represented by chosen model - d
+        """
+    # get params for linear layer
+    W = dy.parameter(W_d)
+    b = dy.parameter(b_d)
+    #get the representation of each model a and b
+    first = get_word_rep_a(w)
+    second = get_word_rep2(w, concat_forward_init)
+    #a concatenation of (a) and (b)
+    word_embeddings_d_model =  dy.concatenate([first, second])
+
+    # followed by a linear layer
+    res = ((W * word_embeddings_d_model) + b)
+    return res
+
+def get_loss(m_words, classes):
+    return calc_loss(m_words, classes, create_computation_graph(m_words))
 
 
 
 if __name__ == '__main__':
-    #set train to be pos/ner
-    is_ner = False
+
     start = time.time()
     #get the kind of model - a/b/c/d
     chosen_model = sys.argv[1]
+
+    # set train to be pos/ner
+    is_set_ner = False
     #read the train data
-    train = list(read_data(sys.argv[2], is_ner))
+    train = list(read_data(sys.argv[2], is_set_ner))
     #read the dev data
-    dev = list(read_data("pos/dev",is_ner))
+    if is_set_ner == False:
+        dev = list(read_data("pos/dev",is_set_ner))
+    else:
+        dev = list(read_data("ner/dev", is_set_ner))
 
     """
     if the chosen model is a : 
@@ -474,14 +484,14 @@ if __name__ == '__main__':
     UNK = vw["_UNK_"]
 
     #get number of different words
-    nwords = len(vw)
-    #print nwords
+    len_words = len(vw)
+    #print len_words
 
 
     # get number of different tags
-    ntags = len(vt)
+    len_of_tags = len(vt)
     print (vt)
-    print ntags
+    print len_of_tags
 
     #init a model with dynet library
     #model = dy.Model()
@@ -491,10 +501,10 @@ if __name__ == '__main__':
 
     if chosen_model == 'c':
         # word embedding matrix
-        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBED_DIM))
+        WORDS_SET_LOOKUP = model.add_lookup_parameters((len_words, WORD_EMBED_DIM))
     else:
         # word embedding matrix
-        WORDS_LOOKUP = model.add_lookup_parameters((nwords, WORD_EMBED_DIM))
+        WORDS_SET_LOOKUP = model.add_lookup_parameters((len_words, WORD_EMBED_DIM))
 
 
     if chosen_model == 'b' or chosen_model == 'd':
@@ -505,7 +515,7 @@ if __name__ == '__main__':
             if the chosen model is d : 
             Each word will be represented in a concatenation of (a) and (b) followed by a linear layer     
             """
-        CHARS_LOOKUP = model.add_lookup_parameters((nchars, CHAR_EMBED_DIM))
+        CHARS_SET_LOOKUP = model.add_lookup_parameters((nchars, CHAR_EMBED_DIM))
 
     # MLP on top of biLSTM
 
@@ -552,6 +562,13 @@ if __name__ == '__main__':
     else:
         #a/b model
         # word-level LSTMs
+        """
+                    if the chosen model is b : 
+                    Each word will be represented in a character-level LSTM
+
+                    if the chosen model is a : 
+                    Each word will be represented in an embedding vector
+                    """
         fwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)  # layers, in-dim, out-dim, model
         bwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
@@ -559,6 +576,10 @@ if __name__ == '__main__':
         secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
     if chosen_model == 'b':
+        """
+        if the chosen model is b : 
+        Each word will be represented in a character-level LSTM
+        """
         # char-level LSTMs
         cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBED_DIM, CHAR_LSTM_DIM, model)
         cBwdRNN = dy.LSTMBuilder(1, CHAR_EMBED_DIM, CHAR_LSTM_DIM, model)
@@ -567,21 +588,31 @@ if __name__ == '__main__':
     start = time.time()
 
     acc = []
-    i = all_time = all_tagged = this_tagged = this_loss = 0
+    time_total = 0
+    cure_loss = 0
+    i = 0
+
+    tag_total = 0
+    cure_tag = 0
+
     #save the accuracy results for ploting the graph after
     graph = {}
+    if is_set_ner == False:
+        is_ner_or_pos = "pos"
+    else:
+        is_ner_or_pos = "ner"
     for epoch_number in range(5):
         # random.shuffle(train)
         for s in train:
             i += 1
             print "aaaaaaaaaaaaaaaaaa"
             if i % 500 == 0:  # print status
-                acc = calculate_accuracy(dev,"pos")
+                acc = calculate_accuracy(dev,is_ner_or_pos)
                 trainer.status()
-                #print(this_loss / this_tagged)
-                all_tagged += this_tagged
-                this_loss = this_tagged = 0
-                all_time = time.time() - start
+
+                tag_total += cure_tag
+                cure_loss = cure_tag = 0
+                time_total = time.time() - start
                 graph[i / 100] = acc
 
             """
@@ -592,16 +623,16 @@ if __name__ == '__main__':
 
             #calculate the loss
             print "hereee"
-            loss_exp = sent_loss(words, m_class)
+            loss_exp = get_loss(words, m_class)
             print "hiiii"
             my_loss = loss_exp.scalar_value()
-            this_loss += my_loss
-            this_tagged += len(m_class)
+            cure_loss += my_loss
+            cure_tag += len(m_class)
             #performs back-propagation, and accumulates the gradients of the parameters
             loss_exp.backward()
             #updates parameters of the parameter collection that was passed to its constructor.
             trainer.update()
-        print("epoch %r is done" % epoch_number)
+        print("epoch  %r is done" % epoch_number)
         trainer.update_epoch(1.0)
 
 #save results for ploting the needed graphs later

@@ -61,7 +61,7 @@ def get_word_rep2(word, cf_init):
 
 # reads train file. adds start*2, end*2 for each sentence for appropriate windows
 # split for words and tags
-def read_data(file_name, is_ner):
+def read_data(file_name, is_set_ner):
     counter = 0
     sent = []
     sent.append(tuple(('start','start')))
@@ -77,7 +77,7 @@ def read_data(file_name, is_ner):
         elif len(line.strip()) == 1:
             continue
         else:
-            if(is_ner):
+            if(is_set_ner):
                 # in ner dataset tab is a saperator
                 word_and_tag = line.strip().split("\t")
             else:
@@ -301,9 +301,13 @@ def get_test_set(test_set):
             m_line.append(m_word)
 
 if __name__ == '__main__':
-    is_ner = False
+
     chosen_model =  sys.argv[1]
-    train = list(read_data('pos/train', is_ner))
+    is_set_ner = False
+    if is_set_ner == False:
+        train = list(read_data('pos/train', is_set_ner))
+    else:
+        train = list(read_data('ner/train', is_set_ner))
 
     if chosen_model == 'a':
         words=[]
@@ -317,7 +321,16 @@ if __name__ == '__main__':
                 wc[w]+=1
         words.append("_UNK_")
 
+        """
+                if the chosen model is b : 
+                Each word will be represented in a character-level LSTM
+
+                if the chosen model is d : 
+                Each word will be represented in a concatenation of (a) and (b) followed by a linear layer     
+                """
+
     if chosen_model == 'b' or chosen_model == 'd':
+
         chars=set()
         words=[]
         tags=[]
@@ -338,6 +351,10 @@ if __name__ == '__main__':
         CUNK = vc["_UNK_"]
         nchars  = len(vc)
 
+    """
+        if the chosen model is c : 
+        Each word will be represented in the embeddings+subword representation used in assignment 2.
+        """
     if chosen_model == 'c':
         words=[]
         tags=[]
@@ -383,6 +400,13 @@ if __name__ == '__main__':
         WORDS_LOOKUP = model.add_lookup_parameters((len_words, WORD_EMBED_DIM))
 
     if chosen_model == 'b' or chosen_model == 'd':
+        """
+                    if the chosen model is b : 
+                    Each word will be represented in a character-level LSTM
+
+                    if the chosen model is d : 
+                    Each word will be represented in a concatenation of (a) and (b) followed by a linear layer     
+                    """
         CHARS_LOOKUP = model.add_lookup_parameters((nchars, CHAR_EMBED_DIM))
 
     # MLP on top of biLSTM outputs 100 -> 32 -> len_of_tags
@@ -394,6 +418,10 @@ if __name__ == '__main__':
     #model.populate(sys.argv[2])
 
     if chosen_model == 'c':
+        """
+                    if the chosen model is c : 
+                    Each word will be represented in the embeddings+subword representation used in assignment 2.
+                    """
         fwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
         bwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
@@ -401,6 +429,11 @@ if __name__ == '__main__':
         secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
     elif chosen_model == 'd':
+        """
+               if the chosen model is d :
+               a concatenation of (a) and (b) followed by a linear layer.
+               that is the reason why the size of the input this time is 100 = 50*2
+               """
         fwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
         bwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
@@ -413,7 +446,14 @@ if __name__ == '__main__':
         b_d = model.add_parameters((WORD_EMBED_DIM))
         cBwdRNN = dy.LSTMBuilder(1, 50, 25, model)
     else:
-        # word-level LSTMs
+        """
+                           if the chosen model is b : 
+                           Each word will be represented in a character-level LSTM
+
+                           if the chosen model is a : 
+                           Each word will be represented in an embedding vector
+                           """
+
         fwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
         bwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
@@ -421,7 +461,11 @@ if __name__ == '__main__':
         secondbwdRNN = dy.LSTMBuilder(1, WORD_EMBED_DIM, LSTM_DIM, model)
 
     if chosen_model == 'b':
-        # char-level LSTMs
+        """
+                if the chosen model is b : 
+                Each word will be represented in a character-level LSTM
+                """
+
         cFwdRNN = dy.LSTMBuilder(1, CHAR_EMBED_DIM, CHAR_LSTM_DIM, model)
         cBwdRNN = dy.LSTMBuilder(1, CHAR_EMBED_DIM, CHAR_LSTM_DIM, model)
     """
